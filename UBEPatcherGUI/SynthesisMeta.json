@@ -1,0 +1,11 @@
+{
+  "Nickname": "UBE_patcher",
+  "Visibility": "Visible",
+  "OneLineDescription": "",
+  "LongDescription": "",
+  "PreferredAutoVersioning": "Default",
+  "RequiredMods": [],
+  "TargetedReleases": [
+    "SkyrimLE"
+  ]
+}

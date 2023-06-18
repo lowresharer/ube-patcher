@@ -1,0 +1,11 @@
+{
+  "Nickname": "UBE Armor Patcher",
+  "Visibility": "Visible",
+  "OneLineDescription": "Synthesis patcher to ",
+  "LongDescription": "Synthesis patcher to ",
+  "PreferredAutoVersioning": "Default",
+  "RequiredMods": [],
+  "TargetedReleases": [
+    "SkyrimLE"
+  ]
+}
