@@ -11,10 +11,7 @@ namespace SynUbePatcher
         static Lazy<PatcherSettings> Settings = null!;              
 
         public static async Task<int> Main(string[] args)
-        {            
-            //var exePath = Assembly.GetAssembly(typeof(Program))?.Location??"";
-            //Print("EXE PATH: " + exePath);
-
+        {                       
             var excludedModKeys = new List<ModKey>
             {
                 ModKey.FromFileName("Skyrim.esm"),
@@ -29,7 +26,7 @@ namespace SynUbePatcher
             {
                 IncludeDisabledMods = false,
                 AddImplicitMasters = false,
-                NoPatch = true,
+                NoPatch = false,
                 ExclusionMods = excludedModKeys
             };
 
@@ -46,21 +43,17 @@ namespace SynUbePatcher
                     nickname: "Settings",
                     path: "settings.json",
                     out Settings)
-                .AddPatch<ISkyrimMod, ISkyrimModGetter>(RunPatch)                
-                .SetTypicalOpen(GameRelease.SkyrimSE, "YourPatcher.esp")              
+                .AddPatch<ISkyrimMod, ISkyrimModGetter>(RunPatch, preferences)                
+                .SetTypicalOpen(GameRelease.SkyrimSE, "UBE_SynthesisPatch.esp")              
                 //.AddRunnabilityCheck(CheckRunnability)
-                .Run(args);
-
-            //Console.ReadKey();
+                .Run(args);            
 
             return a;
         }       
         
-        static string DataFolderPath = "";
-
         public static void CheckRunnability(IRunnabilityState state)
         {
-            //state.LoadOrder.AssertListsMod("UBE_AllRace.esp", "You need UBE_AllRace.esp to be loaded!");            
+            state.LoadOrder.AssertListsMod("UBE_AllRace.esp", "You need UBE_AllRace.esp to be loaded!");            
         }
 
         string[] kTargetRacesEditorIDs = new string[] 
@@ -75,15 +68,7 @@ namespace SynUbePatcher
             @"UBE_TemplateAA",
             @"UBE_CustomRace01_TemplateAA",
             @"UBE_CustomRace02_TemplateAA"
-       };
-
-        string[] kModelTypesToSearch = new string[]
-       {
-            @"Male world model\MOD2",
-            @"Female world model\MOD3",
-            @"Male 1st Person\MOD4",
-            @"Female 1st Person\MOD5"
-       };
+       };   
 
         string[] kArmorAddonElementsToNotUpdate = new string[]
         {
@@ -92,17 +77,7 @@ namespace SynUbePatcher
             @"RNAM - Race",
             @"Additional Races"
         };
-
-        //int iNakedSkinArmorRecordToIgnore =  00000D64; // Do not generate armor to override the Naked Skin vanilla armor  
-        static string sUbePluginName = "UBE_AllRace.esp";
-        
-        string sArmorFilterRaceFileName = "Skyrim.esm";
-
-        string sTargetRaceEdid = "00UBE_BretonRace";
-        string sTargetRaceFileName = sUbePluginName;
-
-        static string sTargetEspName = "UbeArmorPatch.esp";
-
+     
         static void Print(string message, int step = 0)
         {
             var tabString = "";
@@ -113,8 +88,7 @@ namespace SynUbePatcher
               
         public static void RunPatch(IPatcherState<ISkyrimMod, ISkyrimModGetter> state)
         {
-            var settings = Settings.Value;
-            settings.UseSynthesisPatchPlugin = true;
+            var settings = Settings.Value;           
             var patcher = new UbePatcher(state, settings);
             patcher.Patch();
         }

@@ -1,25 +1,15 @@
 using Mutagen.Bethesda;
-using Mutagen.Bethesda.Synthesis;
-using Mutagen.Bethesda.Skyrim;
-using SynUbePatcher.Settings;
-using Mutagen.Bethesda.Plugins;
-using static Mutagen.Bethesda.Synthesis.SynthesisPipeline;
-using System.IO.Abstractions;
 using Mutagen.Bethesda.Environments;
-using Synthesis.Bethesda.Commands;
-using Mutagen.Bethesda.Synthesis.CLI;
-using CommandLine;
-using GameFinder.Common;
-using System.Linq;
-using Noggog;
-using static Mutagen.Bethesda.Skyrim.SkyrimModHeader;
+using Mutagen.Bethesda.Plugins;
 using Mutagen.Bethesda.Plugins.Binary.Parameters;
-using Mutagen.Bethesda.Plugins.Records;
-using DynamicData;
-using System.Reflection;
-using Mutagen.Bethesda.Plugins.Order;
-using System.Security.Cryptography.X509Certificates;
 using Mutagen.Bethesda.Plugins.Cache;
+using Mutagen.Bethesda.Plugins.Order;
+using Mutagen.Bethesda.Plugins.Records;
+using Mutagen.Bethesda.Skyrim;
+using Mutagen.Bethesda.Synthesis;
+using Noggog;
+using SynUbePatcher.Settings;
+using static Mutagen.Bethesda.Skyrim.SkyrimModHeader;
 
 namespace SynUbePatcher
 {
@@ -31,8 +21,7 @@ namespace SynUbePatcher
         string OutputPath;
         ILoadOrder<IModListing<ISkyrimModGetter>> LoadOrder;
         ILinkCache<ISkyrimMod, ISkyrimModGetter> LinkCache;
-        SkyrimMod? PatchMod;
-        TBodySlot[] IgnoredSlots = new TBodySlot[] { TBodySlot.Hair, TBodySlot.Head, TBodySlot.Ears, TBodySlot.Circlet, TBodySlot.LongHair };
+        SkyrimMod? PatchMod;        
 
         uint ArmorFilterRaceId = 25; //Nord race
         List<string> FilePathsToCopy = new List<string>();
@@ -74,6 +63,8 @@ namespace SynUbePatcher
             var outputhPluginPath = OutputPath;
 
             var useMO2 = !string.IsNullOrEmpty(settings.ModOrganizerModsPath);
+            if(useMO2)
+                Print($"Using ModOrganizer mods folder");
 
             var mutableInputMod = SkyrimMod.CreateFromBinary($"{DataFolderPath}//UBE_AllRace.esp", SkyrimRelease.SkyrimSE);
             var ubeCache = mutableInputMod.ToImmutableLinkCache();
@@ -104,16 +95,17 @@ namespace SynUbePatcher
 
             foreach (var modGetter in LoadOrder.PriorityOrder)
             {
-                Print($"PROCESSING:{modGetter.ModKey.FileName}");
+                Print($"[{modGetter.ModKey.FileName}]");
 
                 if (!modGetter.ExistsOnDisk)
                 {
-                    Print($"Plugin file doesn't exist on disk", 1);
+                    Print($"Plugin file doesn't exist on disk\n", 1);
                     continue;
                 }
 
-                if(!settings.LoadOrderSettings.IncludedMods_Source.Contains(modGetter.ModKey))
+                if(settings.LoadOrderSettings.IncludedMods_Source.Count > 0 && !settings.LoadOrderSettings.IncludedMods_Source.Contains(modGetter.ModKey))
                 {
+                    Print($"Mod not found in <IncludedMods_Source>\n", 1);
                     continue;
                 }
 
@@ -129,7 +121,7 @@ namespace SynUbePatcher
                 if (modGetter.ModKey.Type == ModType.Master)
                 {
                     settings.UseSinglePatchPlugin = false;
-                    Print($"Plugin is ESM. EditOriginalPlugin disabled.", 1);
+                    Print($"Plugin is ESM. <EditOriginalPlugin> disabled.", 1);
                 }
 
                 if (!settings.UseSinglePatchPlugin && !settings.UseSynthesisPatchPlugin)
@@ -156,9 +148,9 @@ namespace SynUbePatcher
                 bool isUbePatch = false;
                 foreach (var armorGetter in modGetter.Mod.Armors)
                 {
-                    Print($"PROCESSING:{armorGetter.EditorID}", 1);
+                    Print($"[{HelperUtils.GetSmallName(armorGetter)}]", 1);
 
-                    if (armorGetter.FormKey.ID == 3428) continue; //naked skin armor
+                    if (armorGetter.FormKey.ID == 3428) continue; //vanilla naked skin armor
 
                     if (settings.IgnoreNonPlayable && armorGetter.MajorFlags.HasFlag(Armor.MajorFlag.NonPlayable)) continue; //non-playable
 
@@ -178,7 +170,7 @@ namespace SynUbePatcher
 
                     if (armature.Any(x => x.Race.FormKey == templateArmorAddon.Race.FormKey))
                     {
-                        Print($"Armor already has AA for UBE race, skipping", 2);
+                        Print($"Armor already has AA for UBE race, skipping\n", 2);
                         continue;
                     }
 
@@ -188,7 +180,7 @@ namespace SynUbePatcher
                     {
                         var usableByRace = false;
 
-                        Print($"PROCESSING:{AA.EditorID}", 2);
+                        Print($"[{HelperUtils.GetSmallName(AA)}]", 2);
 
                         if (AA.Race.FormKey.ID == ArmorFilterRaceId)
                             usableByRace = true;
@@ -206,15 +198,19 @@ namespace SynUbePatcher
                         if (!usableByRace) continue; //skip AA
 
                         var newAA = outputMod.ArmorAddons.DuplicateInAsNewRecord(AA);
-                        var slots = GetBodySlots(newAA);
+                        var slots = ArmorSlots.GetBodySlots(newAA);
 
                         newAA.EditorID = $"{newAA.EditorID}_UBE";
 
-                        var onlyIgnoredSlots = !slots.All(x => IgnoredSlots.Contains(x));
+                        var onlyIgnoredSlots = slots.All(x => settings.IgnoredSlots.Contains(x));
                         var isShield = armorOverride.MajorFlags.HasFlag(Armor.MajorFlag.Shield);
 
                         //set model paths
-                        if (settings.OriginalModelPathIgnored || onlyIgnoredSlots || isShield)
+                        if (
+                            !settings.OriginalModelPathAll &&
+                            !(settings.OriginalModelPathIgnored && onlyIgnoredSlots) ||
+                            !isShield
+                            )
                         {
                             var oldPath = newAA.WorldModel?.Female?.File.DataRelativePath;
                             var oldFullPath = $"{DataFolderPath}\\{oldPath}";
@@ -233,21 +229,28 @@ namespace SynUbePatcher
                             var newPath = "meshes\\!UBE\\" + oldPath?.Replace("meshes", "", StringComparison.InvariantCultureIgnoreCase);
                             var newFullPath = oldFullPath.Replace("meshes", "meshes\\!UBE", StringComparison.InvariantCultureIgnoreCase);
                             if (useMO2) newFullPath = $"{settings.ModOrganizerModsPath}\\{outputMod.ModKey.Name}\\{oldPath}"
-                                    .Replace("meshes", "meshes\\!UBE", StringComparison.InvariantCultureIgnoreCase); ;
+                                    .Replace("meshes", "meshes\\!UBE", StringComparison.InvariantCultureIgnoreCase);
 
                             newAA.WorldModel?.Female?.File.SetPath(newPath);
 
-                            if (settings.CopyNifFiles && !File.Exists(newFullPath))
+                            if (settings.CopyNifFiles)
                             {
-                                if (File.Exists(oldFullPath))
+                                if (File.Exists(newFullPath))
                                 {
-                                    Directory.CreateDirectory(Path.GetDirectoryName(newFullPath) ?? "");
-                                    File.Copy(oldFullPath, newFullPath);
+                                    Print($"File already exists: {newFullPath}", 3);
                                 }
                                 else
-                                    Print($"File doesn't exist: {oldFullPath}", 3);
+                                {
+                                    if (File.Exists(oldFullPath))
+                                    {
+                                        Directory.CreateDirectory(Path.GetDirectoryName(newFullPath) ?? "");
+                                        Print($"Copying: {oldFullPath} --> {newFullPath}", 3);
+                                        File.Copy(oldFullPath, newFullPath);
+                                    }
+                                    else
+                                        Print($"File doesn't exist: {oldFullPath}", 3);
+                                }
                             }
-
                             if (!settings.MaleAsFemale)
                             {
                                 oldPath = newAA.WorldModel?.Male?.File.DataRelativePath;
@@ -257,21 +260,40 @@ namespace SynUbePatcher
                                 if (useMO2) newFullPath = $"{settings.ModOrganizerModsPath}\\{outputMod.ModKey.Name}\\{oldPath}"
                                         .Replace("meshes", "meshes\\!UBE", StringComparison.InvariantCultureIgnoreCase); ;
 
-                                if (settings.CopyNifFiles && !File.Exists(newFullPath))
+                                if (settings.CopyNifFiles)
                                 {
-                                    if (File.Exists(oldFullPath))
+                                    if (File.Exists(newFullPath))
                                     {
-                                        Directory.CreateDirectory(Path.GetDirectoryName(newFullPath) ?? "");
-                                        File.Copy(oldFullPath, newFullPath);
+                                        Print($"File already exists: {newFullPath}", 3);                                       
                                     }
                                     else
-                                        Print($"File doesn't exist: {oldFullPath}", 3);
+                                    {
+                                        if (File.Exists(oldFullPath))
+                                        {
+                                            Directory.CreateDirectory(Path.GetDirectoryName(newFullPath) ?? "");
+                                            File.Copy(oldFullPath, newFullPath);
+                                        }
+                                        else
+                                            Print($"File doesn't exist: {oldFullPath}", 3);
+                                    }
                                 }
                             }
-                            newAA.WorldModel?.Male?.File.SetPath(newPath);
-                            newAA.FirstPersonModel?.Male?.File.SetPath(newAA.FirstPersonModel?.Female?.File.DataRelativePath);
+                            else
+                            {
+                                newAA.WorldModel?.Male?.File.SetPath(newPath);
+                                newAA.FirstPersonModel?.Male?.File.SetPath(newAA.FirstPersonModel?.Female?.File.DataRelativePath);
+                            }
                         }
-
+                        else
+                        {
+                            if (settings.MaleAsFemale)
+                            {
+                                newAA.WorldModel?.Male?.File.SetPath(newAA.WorldModel?.Female?.File.DataRelativePath);
+                                newAA.FirstPersonModel?.Male?.File.SetPath(newAA.FirstPersonModel?.Female?.File.DataRelativePath);
+                            }
+                            Print($"Using original model paths", 3);                           
+                        }
+                        
                         //set races
                         newAA.Race.SetTo(templateArmorAddon.Race);
 
@@ -292,6 +314,8 @@ namespace SynUbePatcher
 
                 if (isUbePatch) continue;
 
+                if (settings.UseSynthesisPatchPlugin) continue;
+
                 if (FilePathsToCopy.Contains(outputMod.ModKey.FileName))
                     outputhPluginPath = Path.GetTempPath();
 
@@ -307,6 +331,7 @@ namespace SynUbePatcher
                         });
                     }
 
+                    Print($"Saving patch as {outputhPluginPath}");
                     outputMod.WriteToBinary($"{outputhPluginPath}",
                     new BinaryWriteParameters()
                     {
@@ -314,75 +339,29 @@ namespace SynUbePatcher
                         ModKey = ModKeyOption.NoCheck
                     });
                 }
+                Print();
             }
 
+            if (settings.UseSynthesisPatchPlugin) return;
+
             if (settings.UseSinglePatchPlugin && patchedArmorCountTotal > 0)
+            {
+                Print($"Saving patch as {outputhPluginPath}");
                 outputMod.WriteToBinary($"{outputhPluginPath}",
                     new BinaryWriteParameters()
                     {
                         LightMasterLimit = LightMasterLimitOption.ExceptionOnOverflow,
                         ModKey = ModKeyOption.NoCheck
                     });
+            }
         }
 
-        static void Print(string message, int step = 0)
+        static void Print(string message = "", int step = 0)
         {
             var tabString = "";
             for (int i = 0; i < step; i++)
-                tabString += "  ";
+                tabString += "   ";
             Console.WriteLine($"{tabString}{message}");
-        }
-
-
-        internal static IEnumerable<TBodySlot> ArmorSlots = HelperUtils.GetEnumValues<TBodySlot>();
-
-        public static IEnumerable<TBodySlot> GetBodySlots(IArmorGetter armor)
-        {
-            BipedObjectFlag flags = armor.BodyTemplate?.FirstPersonFlags ?? 0;
-            return ArmorSlots.Where(x => flags.HasFlag((BipedObjectFlag)x));
-        }
-
-        public static IEnumerable<TBodySlot> GetBodySlots(IArmorAddonGetter addon)
-        {
-            BipedObjectFlag flags = addon.BodyTemplate?.FirstPersonFlags ?? 0;
-            return ArmorSlots.Where(x => flags.HasFlag((BipedObjectFlag)x));
-        }
-
-        public enum TBodySlot : uint
-        {
-            Head = 1,                   // 30
-            Hair = 2,                   // 31
-            Body = 4,                   // 32
-            Hands = 8,                  // 33
-            Forearms = 16,              // 34
-            Amulet = 32,                // 35
-            Ring = 64,                  // 36
-            Feet = 128,                 // 37
-            Calves = 256,               // 38
-            Shield = 512,               // 39
-            Tail = 1024,                // 40
-            LongHair = 2048,            // 41
-            Circlet = 4096,             // 42
-            Ears = 8192,                // 43
-            FaceMouth = 16384,          // 44
-            Neck = 32768,               // 45
-            Chest = 65536,              // 46
-            Back = 131072,              // 47
-            Misc1 = 262144,             // 48
-            Pelvis = 524288,            // 49
-            DecapitateHead = 1048576,   // 50
-            Decapitate = 2097152,       // 51
-            PelvisUnder = 4194304,      // 52
-            LegMainOrRight = 8388608,   // 53
-            LegAltOrLeft = 16777216,    // 54
-            FaceAlt = 33554432,         // 55
-            ChestUnder = 67108864,      // 56
-            Shoulder = 134217728,       // 57
-            ArmAltOrLeft = 268435456,   // 58
-            ArmMainORight = 536870912,  // 59
-            Misc2 = 1073741824,         // 60
-            FX01 = 2147483648           // 61
-        }
-
-    }
+        }         
+    }    
 }

@@ -1,20 +1,28 @@
-
-
-using Mutagen.Bethesda;
-using Mutagen.Bethesda.Plugins;
+using System.Text.RegularExpressions;
+using Mutagen.Bethesda.Plugins.Records;
 using Mutagen.Bethesda.Skyrim;
 using Noggog;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
 
 
 namespace SynUbePatcher
 {
     public static class HelperUtils
     {
+        public static string GetHexId(IMajorRecordGetter record)
+        {
+            //var modId = record.FormKey.ModKey.;
+            var recordId = record.FormKey.ID;
+            return $"0x{recordId:X8}";
+        }
 
+        public static string GetSmallName(IMajorRecordGetter record)
+        {
+            //var modId = record.FormKey.ModKey.;
+            var recordId = record.FormKey.ID;
+            return $"{record.EditorID}:{GetHexId(record)}";
+        }
+
+        //from https://github.com/sachinkmr/OutfitPatcher
         public static IEnumerable<T> GetEnumValues<T>()
         {
             return Enum.GetValues(typeof(T)).Cast<T>();
@@ -107,8 +115,6 @@ namespace SynUbePatcher
             var underscore = Regex.Replace(input, "[_/-]", " ", RegexOptions.Compiled).Trim();
             return Regex.Replace(underscore, "([a-z0-9])([A-Z])", "$1 $2", RegexOptions.Compiled).Trim();
         }
-
-
 
 
         public static IEnumerable<IEnumerable<T>> CartesianProduct<T>(this IEnumerable<IEnumerable<T>> sequences)
